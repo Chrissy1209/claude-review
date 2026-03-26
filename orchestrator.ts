@@ -71,6 +71,20 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
   };
 }
 
+// Files to skip during review (generated files, lock files, etc.)
+const SKIP_PATTERNS = [
+  /package-lock\.json$/,
+  /yarn\.lock$/,
+  /pnpm-lock\.yaml$/,
+  /\.lock$/,
+  /dist\//,
+  /build\//,
+];
+
+function shouldSkip(filename: string): boolean {
+  return SKIP_PATTERNS.some((p) => p.test(filename));
+}
+
 // ---- Main pipeline ----
 export async function runPipeline(args: CLIArgs): Promise<void> {
   // Step 0: validate environment variables
@@ -99,7 +113,7 @@ export async function runPipeline(args: CLIArgs): Promise<void> {
     // Step 2: parse diff
     currentStep = "parse";
     console.log("[2/4] 解析 diff...");
-    const files = parseDiff(rawDiff);
+    const files = parseDiff(rawDiff).filter((f) => !shouldSkip(f.filename));
     if (files.length === 0) {
       console.warn("警告：diff 為空，將繼續送審。");
     } else {
