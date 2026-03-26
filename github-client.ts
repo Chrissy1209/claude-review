@@ -19,6 +19,7 @@ export interface GitHubReviewPayload {
 export interface GitHubClient {
   fetchPRDiff(pr: PRIdentifier): Promise<string>;
   publishReview(pr: PRIdentifier, payload: GitHubReviewPayload): Promise<string>;
+  getExistingReviewComments(pr: PRIdentifier): Promise<string[]>;
 }
 
 export class AuthError extends Error {
@@ -122,5 +123,16 @@ export function createGitHubClient(token: string): GitHubClient {
     return reviewUrl;
   }
 
-  return { fetchPRDiff, publishReview };
+  async function getExistingReviewComments(pr: PRIdentifier): Promise<string[]> {
+    const { owner, repo, pullNumber } = pr;
+    const url = `${baseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/comments`;
+    const res = await fetch(url, {
+      headers: { ...headers, Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { body: string }[];
+    return data.map((c) => c.body);
+  }
+
+  return { fetchPRDiff, publishReview, getExistingReviewComments };
 }
