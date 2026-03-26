@@ -66,7 +66,7 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
 
   return {
     body,
-    event: result.approved ? "APPROVE" : "REQUEST_CHANGES",
+    event: result.approved ? "COMMENT" : "REQUEST_CHANGES",
     comments,
   };
 }
