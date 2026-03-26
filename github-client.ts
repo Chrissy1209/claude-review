@@ -12,7 +12,7 @@ export interface GitHubInlineComment {
 
 export interface GitHubReviewPayload {
   body: string;
-  event: "APPROVE" | "REQUEST_CHANGES";
+  event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
   comments: GitHubInlineComment[];
 }
 
