@@ -49,7 +49,7 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
     const appended = noLineComments
       .filter((c) => c.severity !== "info")
       .map((c) => {
-        const tag = c.severity === "info" ? "📌" : c.severity.toUpperCase();
+        const tag = c.severity.toUpperCase();
         const parts = [`**[${tag}]** \`${c.category}\` ${c.filename}: ${c.message}`];
         if (c.suggestion) parts.push(`> 建議：${c.suggestion}`);
         return parts.join("\n");
@@ -61,7 +61,7 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
   const comments = lineComments
     .filter((c) => c.severity !== "info")
     .map((c) => {
-      const tag = c.severity === "info" ? "📌" : c.severity.toUpperCase();
+      const tag = c.severity.toUpperCase();
       const commentBody = c.suggestion
         ? `**[${tag}]** \`${c.category}\`\n\n${c.message}\n\n> 建議：${c.suggestion}`
         : `**[${tag}]** \`${c.category}\`\n\n${c.message}`;
@@ -138,7 +138,13 @@ export async function runPipeline(args: CLIArgs): Promise<void> {
       console.log("[4/4] 發布審查結果到 GitHub...");
       const payload = mapToPayload(result);
       const existing = await client.getExistingReviewComments(pr);
-      payload.comments = payload.comments.filter((c) => !existing.includes(c.body));
+      // 使用 path + line + body 的組合去重，避免不同位置的相同評論被誤認為重複
+      const existingSet = new Set(
+        existing.map((c) => `${c.path}:${c.line}:${c.body}`)
+      );
+      payload.comments = payload.comments.filter(
+        (c) => !existingSet.has(`${c.path}:${c.line}:${c.body}`)
+      );
       const reviewUrl = await client.publishReview(pr, payload);
       console.log(`審查已發布：${reviewUrl}`);
     }
