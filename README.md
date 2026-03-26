@@ -2,17 +2,21 @@
 
 一個 AI 驅動的 GitHub PR 自動審查工具，透過 Claude 分析 Pull Request 的 diff，並將審查結果直接發布回 GitHub。
 
+> 想看實際效果？歡迎參閱本專案 [Pull Requests](https://github.com/Chrissy1209/claude-review/pulls)
+
 ## 功能
 
 - 自動從 GitHub 取得 PR diff
-- 使用 Claude 進行程式碼審查，涵蓋安全性、邏輯錯誤、品質與風格
+- 使用 Claude (`claude-sonnet-4-20250514`) 進行程式碼審查，涵蓋安全性、邏輯錯誤、品質與風格
 - 將審查結果以 PR Review 形式發布回 GitHub（支援行內評論）
+- 自動略過 lock 檔、build 產物等不需審查的檔案
+- 重複執行時自動去重，避免發布相同評論
 - 支援 `--dry-run` 模式，僅印出審查結果而不發布
 
 ## 前置需求
 
 - Node.js 18+
-- GitHub Personal Access Token（需有 `repo 及 pull_requests:write` 權限）
+- GitHub Personal Access Token（需有 `repo` 及 `pull_requests:write` 權限）
 - Anthropic API Key
 
 ## 安裝
@@ -40,7 +44,7 @@ npm start -- --owner <owner> --repo <repo> --pr <number> [--dry-run]
 |------|------|------|
 | `--owner` | ✓ | GitHub 使用者或組織名稱 |
 | `--repo` | ✓ | 倉庫名稱 |
-| `--pr` | ✓ | Pull Request 編號 |
+| `--pr` | ✓ | Pull Request 編號（正整數） |
 | `--dry-run` | | 僅印出審查結果，不發布到 GitHub |
 
 ### 範例
@@ -64,11 +68,22 @@ npm start -- --owner octocat --repo hello-world --pr 42 --dry-run
 
 問題類別：`security`（安全性）、`logic`（邏輯錯誤）、`quality`（品質）、`style`（風格）
 
+發布到 GitHub 時，有行號的評論會以行內 review comment 呈現；無行號的評論附加在 review 摘要內文。
+
+## 略過的檔案
+
+以下類型的檔案會自動略過，不納入審查：
+
+- `package-lock.json`、`yarn.lock`、`pnpm-lock.yaml`、`*.lock`
+- `dist/`、`build/` 目錄下的所有檔案
+
 ## 執行測試
 
 ```bash
 npm test
 ```
+
+測試涵蓋 unit tests 與 property-based tests（使用 [fast-check](https://github.com/dubzzz/fast-check)），驗證 CLI 解析、diff 處理、GitHub API 整合與審查結果映射等核心行為。
 
 ## 專案結構
 
@@ -80,3 +95,15 @@ npm test
 ├── diff-parser.ts    # Git diff 解析
 └── reviewer.ts       # Claude 審查邏輯
 ```
+
+## 錯誤處理
+
+| 狀況 | 行為 |
+|------|------|
+| `GITHUB_TOKEN` 未設定 | 印出明確錯誤訊息後退出 |
+| `ANTHROPIC_API_KEY` 未設定 | 印出明確錯誤訊息後退出 |
+| GitHub API 401 | 印出認證失敗訊息後退出 |
+| GitHub API 404 | 印出含 repo 名稱或 PR 編號的錯誤後退出 |
+| GitHub API 5xx | 印出 HTTP 狀態碼後退出 |
+| 缺少必要 CLI 參數 | 印出 usage 說明後退出 |
+| diff 為空 | 印出警告並繼續送審 |
