@@ -37,16 +37,19 @@ export function printResult(result: ReviewResult): void {
 
 // ---- ReviewResult → GitHubReviewPayload mapping ----
 export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
-  // Collect comments without a line number to append to body
   const noLineComments = result.comments.filter((c) => c.line == null);
   const lineComments = result.comments.filter((c) => c.line != null);
 
-  let body = result.summary;
+  const riskEmoji = { low: "🟢", medium: "🟡", high: "🔴" }[result.riskLevel];
+  const decision = result.approved ? "✅ 通過" : "❌ 需要修改";
+
+  let body = `## AI Code Review\n\n${decision} | 風險等級：${riskEmoji} ${result.riskLevel.toUpperCase()}\n\n**摘要：** ${result.summary}`;
+
   if (noLineComments.length > 0) {
     const appended = noLineComments
       .map((c) => {
-        const parts = [`**[${c.severity.toUpperCase()}]** ${c.filename}: ${c.message}`];
-        if (c.suggestion) parts.push(`建議：${c.suggestion}`);
+        const parts = [`**[${c.severity.toUpperCase()}]** \`${c.category}\` ${c.filename}: ${c.message}`];
+        if (c.suggestion) parts.push(`> 建議：${c.suggestion}`);
         return parts.join("\n");
       })
       .join("\n\n");
@@ -55,13 +58,9 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
 
   const comments = lineComments.map((c) => {
     const commentBody = c.suggestion
-      ? `${c.message}\n\n建議：${c.suggestion}`
-      : c.message;
-    return {
-      path: c.filename,
-      line: c.line!,
-      body: commentBody,
-    };
+      ? `**[${c.severity.toUpperCase()}]** \`${c.category}\`\n\n${c.message}\n\n> 建議：${c.suggestion}`
+      : `**[${c.severity.toUpperCase()}]** \`${c.category}\`\n\n${c.message}`;
+    return { path: c.filename, line: c.line!, body: commentBody };
   });
 
   return {
@@ -69,6 +68,20 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
     event: result.approved ? "COMMENT" : "REQUEST_CHANGES",
     comments,
   };
+}
+
+// Files to skip during review (generated files, lock files, etc.)
+const SKIP_PATTERNS = [
+  /package-lock\.json$/,
+  /yarn\.lock$/,
+  /pnpm-lock\.yaml$/,
+  /\.lock$/,
+  /dist\//,
+  /build\//,
+];
+
+function shouldSkip(filename: string): boolean {
+  return SKIP_PATTERNS.some((p) => p.test(filename));
 }
 
 // ---- Main pipeline ----
@@ -99,7 +112,7 @@ export async function runPipeline(args: CLIArgs): Promise<void> {
     // Step 2: parse diff
     currentStep = "parse";
     console.log("[2/4] 解析 diff...");
-    const files = parseDiff(rawDiff);
+    const files = parseDiff(rawDiff).filter((f) => !shouldSkip(f.filename));
     if (files.length === 0) {
       console.warn("警告：diff 為空，將繼續送審。");
     } else {

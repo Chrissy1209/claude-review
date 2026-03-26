@@ -12,7 +12,7 @@
 ## 前置需求
 
 - Node.js 18+
-- GitHub Personal Access Token（需有 `repo` 權限）
+- GitHub Personal Access Token（需有 `repo 及 pull_requests:write` 權限）
 - Anthropic API Key
 
 ## 安裝
