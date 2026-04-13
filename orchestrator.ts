@@ -47,21 +47,26 @@ export function mapToPayload(result: ReviewResult): GitHubReviewPayload {
 
   if (noLineComments.length > 0) {
     const appended = noLineComments
+      .filter((c) => c.severity !== "info")
       .map((c) => {
-        const parts = [`**[${c.severity.toUpperCase()}]** \`${c.category}\` ${c.filename}: ${c.message}`];
+        const tag = c.severity.toUpperCase();
+        const parts = [`**[${tag}]** \`${c.category}\` ${c.filename}: ${c.message}`];
         if (c.suggestion) parts.push(`> 建議：${c.suggestion}`);
         return parts.join("\n");
       })
       .join("\n\n");
-    body = `${body}\n\n---\n\n${appended}`;
+    if (appended) body = `${body}\n\n---\n\n${appended}`;
   }
 
-  const comments = lineComments.map((c) => {
-    const commentBody = c.suggestion
-      ? `**[${c.severity.toUpperCase()}]** \`${c.category}\`\n\n${c.message}\n\n> 建議：${c.suggestion}`
-      : `**[${c.severity.toUpperCase()}]** \`${c.category}\`\n\n${c.message}`;
-    return { path: c.filename, line: c.line!, body: commentBody };
-  });
+  const comments = lineComments
+    .filter((c) => c.severity !== "info")
+    .map((c) => {
+      const tag = c.severity.toUpperCase();
+      const commentBody = c.suggestion
+        ? `**[${tag}]** \`${c.category}\`\n\n${c.message}\n\n> 建議：${c.suggestion}`
+        : `**[${tag}]** \`${c.category}\`\n\n${c.message}`;
+      return { path: c.filename, line: c.line!, body: commentBody };
+    });
 
   return {
     body,
@@ -132,6 +137,14 @@ export async function runPipeline(args: CLIArgs): Promise<void> {
       currentStep = "publish";
       console.log("[4/4] 發布審查結果到 GitHub...");
       const payload = mapToPayload(result);
+      const existing = await client.getExistingReviewComments(pr);
+      // 使用 path + line + body 的組合去重，避免不同位置的相同評論被誤認為重複
+      const existingSet = new Set(
+        existing.map((c) => `${c.path}:${c.line}:${c.body}`)
+      );
+      payload.comments = payload.comments.filter(
+        (c) => !existingSet.has(`${c.path}:${c.line}:${c.body}`)
+      );
       const reviewUrl = await client.publishReview(pr, payload);
       console.log(`審查已發布：${reviewUrl}`);
     }

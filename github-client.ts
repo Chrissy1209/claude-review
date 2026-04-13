@@ -16,9 +16,16 @@ export interface GitHubReviewPayload {
   comments: GitHubInlineComment[];
 }
 
+export interface ExistingComment {
+  path: string;
+  line: number;
+  body: string;
+}
+
 export interface GitHubClient {
   fetchPRDiff(pr: PRIdentifier): Promise<string>;
   publishReview(pr: PRIdentifier, payload: GitHubReviewPayload): Promise<string>;
+  getExistingReviewComments(pr: PRIdentifier): Promise<ExistingComment[]>;
 }
 
 export class AuthError extends Error {
@@ -122,5 +129,22 @@ export function createGitHubClient(token: string): GitHubClient {
     return reviewUrl;
   }
 
-  return { fetchPRDiff, publishReview };
+  async function getExistingReviewComments(pr: PRIdentifier): Promise<ExistingComment[]> {
+    const { owner, repo, pullNumber } = pr;
+    const url = `${baseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/comments`;
+    const res = await fetch(url, {
+      headers: { ...headers, Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as Array<{ path?: string; line?: number; body?: string }>;
+    return data
+      .filter((c) => c.path != null && c.line != null && c.body != null)
+      .map((c) => ({
+        path: c.path!,
+        line: c.line!,
+        body: c.body!,
+      }));
+  }
+
+  return { fetchPRDiff, publishReview, getExistingReviewComments };
 }
